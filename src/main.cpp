@@ -5,9 +5,6 @@
 #include <cmath>
 #include <random>
 
-// Input handling
-// ==============
-
 const double double_tap_time = 0.5; // seconds
 const double scroll_multiplier = 0.05; // scaling for zoom
 
@@ -18,11 +15,7 @@ double last_y_down = 0.0;
 
 FONScontext* ftCtx;
 fsuint textBuffer;
-#define NB_TEXT 3000
-
-int nextPowerOf2(int value) {
-    return pow(2, ceil(log(value) / log(2)));
-}
+#define NB_TEXT 4096
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
 
@@ -90,60 +83,21 @@ void scroll_callback(GLFWwindow* window, double scrollx, double scrolly) {
 
 }
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-
-    if (action == GLFW_PRESS) {
-        switch (key) {
-            case GLFW_KEY_1:
-                Tangram::setDebugFlag(Tangram::DebugFlags::FREEZE_TILES, !Tangram::getDebugFlag(Tangram::DebugFlags::FREEZE_TILES));
-                break;
-            case GLFW_KEY_2:
-                Tangram::setDebugFlag(Tangram::DebugFlags::PROXY_COLORS, !Tangram::getDebugFlag(Tangram::DebugFlags::PROXY_COLORS));
-                break;
-            case GLFW_KEY_3:
-                Tangram::setDebugFlag(Tangram::DebugFlags::TILE_BOUNDS, !Tangram::getDebugFlag(Tangram::DebugFlags::TILE_BOUNDS));
-                break;
-            case GLFW_KEY_4:
-                Tangram::setDebugFlag(Tangram::DebugFlags::TILE_INFOS, !Tangram::getDebugFlag(Tangram::DebugFlags::TILE_INFOS));
-                break;
-            default:
-                break;
-        }
-    }
-}
-
-
-// Window handling
-// ===============
-
-void window_size_callback(GLFWwindow* window, int width, int height) {
-
-    Tangram::resize(width, height);
-
-}
-
-// Main program
-// ============
-
 int main(void) {
 
     GLFWwindow* window;
     int width = 800;
     int height = 600;
 
-    /* Initialize the library */
     if (!glfwInit())
         return -1;
 
-    /* Create a windowed mode window and its OpenGL context */
-    glfwWindowHint(GLFW_SAMPLES, 2);
     window = glfwCreateWindow(width, height, "Tangram ES - ASCII MAP", NULL, NULL);
     if (!window) {
         glfwTerminate();
         return -1;
     }
 
-    /* Make the window's context current */
     glfwMakeContextCurrent(window);
 
     NSurlInit();
@@ -151,19 +105,20 @@ int main(void) {
     Tangram::initialize();
     Tangram::resize(width, height);
 
+    /* Work-around for a bug in GLFW on retina displays */
+    int fbWidth = 0, fbHeight = 0;
+    glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+    glViewport(0, 0, fbWidth, fbHeight);
+    float dpi = fbWidth / width;
+
     // init font context
     GLFONSparams params;
     params.useGLBackend = true; // if not set to true, you must provide your own gl backend
     ftCtx = glfonsCreate(512, 512, FONS_ZERO_TOPLEFT, params, nullptr);
     fonsAddFont(ftCtx, "Arial", "/Library/Fonts/Arial.ttf");
 
-    // set the screen size for font context transformations
-    glfonsScreenSize(ftCtx, width, height);
-
-    // create and bind buffer
-    glfonsBufferCreate(ftCtx, nextPowerOf2(NB_TEXT), &textBuffer);
-
-    // generate text ids for the currently bound text buffer
+    glfonsScreenSize(ftCtx, width * dpi, height * dpi);
+    glfonsBufferCreate(ftCtx, NB_TEXT, &textBuffer);
 
     struct Text {
         fsuint id;
@@ -179,29 +134,18 @@ int main(void) {
 
     fonsSetBlur(ftCtx, 2.5);
     fonsSetBlurType(ftCtx, FONS_EFFECT_DISTANCE_FIELD);
-    fonsSetSize(ftCtx, 20.0);
+    fonsSetSize(ftCtx, 20.0 * dpi);
 
     for (int i = 0; i < NB_TEXT; ++i) {
         glfonsRasterize(ftCtx, texts[i].id, "O");
     }
 
-    // push transforms of currently bound buffer buffer to gpu
     glfonsUpdateTransforms(ftCtx);
-
-    // upload rasterized data of currently bound buffer to gpu
     glfonsUpload(ftCtx);
 
-    /* Work-around for a bug in GLFW on retina displays */
-    int fbWidth = 0, fbHeight = 0;
-    glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
-    glViewport(0, 0, fbWidth, fbHeight);
-
-    /* Set input callbacks */
-    glfwSetWindowSizeCallback(window, window_size_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetCursorPosCallback(window, cursor_pos_callback);
     glfwSetScrollCallback(window, scroll_callback);
-    glfwSetKeyCallback(window, key_callback);
 
     glfwSwapInterval(1);
 
@@ -210,23 +154,17 @@ int main(void) {
     GLuint framebuffer = 0;
     glGenFramebuffers(1, &framebuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-
     GLuint renderedTexture;
     glGenTextures(1, &renderedTexture);
-     
     glBindTexture(GL_TEXTURE_2D, renderedTexture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
-
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-
     GLuint depthrenderbuffer;
     glGenRenderbuffers(1, &depthrenderbuffer);
     glBindRenderbuffer(GL_RENDERBUFFER, depthrenderbuffer);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthrenderbuffer);
-
-    // Set "renderedTexture" as our colour attachement #0
     glFramebufferTextureEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, renderedTexture, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -234,23 +172,32 @@ int main(void) {
     float data[width * height];
     //std::string chars = " .\'`^\",:;Il!i~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8\%B@$";
 
-    /* Loop until the user closes the window */
     while (!glfwWindowShouldClose(window)) {
-
         double t = glfwGetTime();
         double delta = t - lastTime;
         lastTime = t;
 
         glBindTexture(GL_TEXTURE_2D, renderedTexture);
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-        glViewport(0, 0, width, height); 
+        glViewport(0, 0, width, height);
 
-        /* Render here */
         Tangram::update(delta);
         Tangram::render();
 
         glBindTexture(GL_TEXTURE_2D, renderedTexture);
         glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+
+        unsigned int temp;
+        int row, col;
+
+        // flip buffer
+        for (row = 0; row < (height >> 1); row++) {
+            for (col = 0; col < width; col++) {
+                temp = pixelData[(row * width + col)];
+                pixelData[(row * width + col)] = pixelData[((height - row - 1) * width + col)];
+                pixelData[((height - row - 1) * width + col)] = temp;
+            }
+        }
 
         for (int i = 0; i < width * height; ++i) {
             unsigned int pixel = pixelData[i];
@@ -263,30 +210,24 @@ int main(void) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glViewport(0, 0, width * dpi, height * dpi);
 
-        // push transforms to gpu
         glfonsUpdateTransforms(ftCtx);
 
         int i = 0;
         for (int x = 15; x < width - 15; x += 12) {
             for (int y = 15 * 1.8; y < height - 15; y += 12) {
                 if (i < NB_TEXT) {
-                    glfonsTransform(ftCtx, texts[i].id, x, y, 0.0, data[x + y * width]);
+                    glfonsTransform(ftCtx, texts[i].id, x * dpi, y * dpi, 0.0, data[x + y * width]);
                 }
                 i++;
             }
         }
 
-        // set rendering color for current buffer
         glfonsSetColor(ftCtx, 0x000000);
-
-        // render the text
         glfonsDraw(ftCtx);
-
-        /* Swap front and back buffers */
         glfwSwapBuffers(window);
 
-        /* Poll for and process events */
         if (isContinuousRendering()) {
             glfwPollEvents();
         } else {
@@ -295,6 +236,9 @@ int main(void) {
     }
 
     Tangram::teardown();
+    glDeleteTextures(1, &renderedTexture);
+    glDeleteFramebuffers(1, &framebuffer);
+    glDeleteRenderbuffers(1, &depthrenderbuffer);
     glfwTerminate();
     return 0;
 }
