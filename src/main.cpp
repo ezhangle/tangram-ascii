@@ -184,7 +184,8 @@ int main(void) {
         Tangram::update(delta);
         Tangram::render();
 
-        glBindTexture(GL_TEXTURE_2D, renderedTexture);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        // read pixels from currently bound buffer
         glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
 
         unsigned int temp;
@@ -207,6 +208,7 @@ int main(void) {
             data[i] = ((r + g + b) / 3.0) / 255.0;
         }
 
+        // unbind frame buffer
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
