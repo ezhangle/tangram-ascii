@@ -1,0 +1,3 @@
+[submodule "tangram-es"]
+	path = tangram-es
+	url = git@github.com:karimnaaji/tangram-es.git
