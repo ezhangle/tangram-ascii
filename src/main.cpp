@@ -15,7 +15,7 @@ double last_y_down = 0.0;
 
 FONScontext* ftCtx;
 fsuint textBuffer;
-#define NB_TEXT 4096
+#define NB_TEXT 8192
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
 
@@ -86,8 +86,8 @@ void scroll_callback(GLFWwindow* window, double scrollx, double scrolly) {
 int main(void) {
 
     GLFWwindow* window;
-    int width = 800;
-    int height = 600;
+    int width = 500;
+    int height = 500;
 
     if (!glfwInit())
         return -1;
@@ -215,8 +215,8 @@ int main(void) {
         glfonsUpdateTransforms(ftCtx);
 
         int i = 0;
-        for (int x = 15; x < width - 15; x += 12) {
-            for (int y = 15 * 1.8; y < height - 15; y += 12) {
+        for (int x = 30; x < width - 40; x += 6) {
+            for (int y = 40; y < height - 30; y += 6) {
                 if (i < NB_TEXT) {
                     glfonsTransform(ftCtx, texts[i].id, x * dpi, y * dpi, 0.0, data[x + y * width]);
                 }
